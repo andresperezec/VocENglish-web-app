@@ -1,0 +1,6 @@
+{
+  "name": "VocEnglish",
+  "description": "Aplicación interactiva de evaluación y práctica de vocabulario en inglés con 117 expresiones, ejercicios avanzados y seguimiento de progreso.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
