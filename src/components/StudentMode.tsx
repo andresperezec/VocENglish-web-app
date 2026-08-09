@@ -1,7 +1,8 @@
-import React, { useState, useMemo, useRef } from 'react';
+import React, { useState, useMemo, useRef, useEffect } from 'react';
 import { VocabularyItem, WordStatus, QuestionConfig } from '../types';
-import { getStoredGroups } from '../utils/storage';
+import { getStoredGroups, getStoredPendingCardWords } from '../utils/storage';
 import { playPronunciation } from '../utils/audio';
+import { AutoCreateCardsModal } from './AutoCreateCardsModal';
 import { 
   Search, 
   CheckCircle, 
@@ -29,8 +30,11 @@ import {
   Sparkles,
   Loader2,
   Volume2,
-  StickyNote
+  StickyNote,
+  Wand2,
+  BookmarkPlus
 } from 'lucide-react';
+
 
 interface StudentModeProps {
   vocabulary: VocabularyItem[];
@@ -96,6 +100,16 @@ export const StudentMode: React.FC<StudentModeProps> = ({
   const [deletingItemId, setDeletingItemId] = useState<number | null>(null);
   const [isBackupModalOpen, setIsBackupModalOpen] = useState<boolean>(false);
   const [isGroupModalOpen, setIsGroupModalOpen] = useState<boolean>(false);
+
+  // Auto Create Flashcards Modal state
+  const [isAutoCreateModalOpen, setIsAutoCreateModalOpen] = useState<boolean>(false);
+  const [pendingCardWordsCount, setPendingCardWordsCount] = useState<number>(0);
+
+  // Sync count of pending card words
+  useEffect(() => {
+    setPendingCardWordsCount(getStoredPendingCardWords().length);
+  }, [vocabulary, isAutoCreateModalOpen]);
+
 
   // Batch Add Modal state
   const [isBatchModalOpen, setIsBatchModalOpen] = useState<boolean>(false);
@@ -336,8 +350,18 @@ export const StudentMode: React.FC<StudentModeProps> = ({
           setNewPastParticiple(prev => prev || data.pastParticiple || '');
         }
 
-        if (!newSpanish.trim() && data.spanish) {
+        if (data.spanish) {
           setNewSpanish(data.spanish);
+        }
+
+        if (data.present) {
+          setNewPresent(data.present);
+        }
+        if (data.past) {
+          setNewPast(data.past);
+        }
+        if (data.pastParticiple) {
+          setNewPastParticiple(data.pastParticiple);
         }
 
         if (!newEnglish.trim()) {
@@ -545,8 +569,18 @@ export const StudentMode: React.FC<StudentModeProps> = ({
           setEditPastParticiple(prev => prev || data.pastParticiple || '');
         }
 
-        if (!editSpanish.trim() && data.spanish) {
+        if (data.spanish) {
           setEditSpanish(data.spanish);
+        }
+
+        if (data.present) {
+          setEditPresent(data.present);
+        }
+        if (data.past) {
+          setEditPast(data.past);
+        }
+        if (data.pastParticiple) {
+          setEditPastParticiple(data.pastParticiple);
         }
 
         if (!editEnglish.trim()) {
@@ -729,8 +763,22 @@ export const StudentMode: React.FC<StudentModeProps> = ({
             </button>
           </div>
 
-          {/* Row 2: Agregar en lote (IA), Respaldo JSON */}
+          {/* Row 2: Crear automáticamente tarjetas, Agregar en lote (IA), Respaldo JSON */}
           <div className="flex flex-wrap items-center gap-2">
+            <button
+              onClick={() => setIsAutoCreateModalOpen(true)}
+              className="px-3.5 py-2 bg-gradient-to-r from-purple-700 via-indigo-700 to-indigo-800 hover:from-purple-800 hover:to-indigo-900 text-white font-extrabold text-xs rounded-xl shadow-md shadow-purple-200 transition-all flex items-center space-x-1.5 cursor-pointer relative"
+              title="Crear automáticamente tarjetas con IA de las palabras guardadas durante tus prácticas"
+            >
+              <Wand2 className="w-4 h-4 text-amber-300" />
+              <span>Crear automáticamente tarjetas de palabras</span>
+              {pendingCardWordsCount > 0 && (
+                <span className="ml-1 px-2 py-0.5 bg-amber-400 text-slate-900 font-black text-[10px] rounded-full shadow-2xs">
+                  {pendingCardWordsCount}
+                </span>
+              )}
+            </button>
+
             <button
               onClick={openBatchModal}
               className="px-3.5 py-2 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700 text-white font-bold text-xs rounded-xl shadow-md shadow-purple-100 transition-all flex items-center space-x-1.5 cursor-pointer"
@@ -747,6 +795,7 @@ export const StudentMode: React.FC<StudentModeProps> = ({
               <span>Respaldo JSON</span>
             </button>
           </div>
+
 
           {/* Row 3: Evaluar, Administrar Grupos */}
           <div className="flex flex-wrap items-center gap-2">
@@ -2622,7 +2671,19 @@ export const StudentMode: React.FC<StudentModeProps> = ({
           </div>
         </div>
       )}
+
+      {/* Auto Create Flashcards Modal */}
+      <AutoCreateCardsModal
+        isOpen={isAutoCreateModalOpen}
+        onClose={() => setIsAutoCreateModalOpen(false)}
+        availableGroups={availableGroups}
+        onCardsCreated={(count, groups) => {
+          showToast(`Se agregaron ${count} nuevas tarjetas a tu colección.`);
+        }}
+        showToast={showToast}
+      />
     </div>
   );
 };
+
 

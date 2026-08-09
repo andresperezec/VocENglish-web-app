@@ -1053,5 +1053,47 @@ export const INITIAL_VOCABULARY: VocabularyItem[] = [
     attempts: 0,
     correctCount: 0,
     exampleSentence: "I am sweaty because ____ ____ ____ ____ ____."
+  },
+  {
+    id: 118,
+    english: "To run",
+    spanish: "Correr",
+    group: "Verbs",
+    present: "run",
+    past: "ran",
+    pastParticiple: "run",
+    isVerb: true,
+    status: "not_practiced",
+    attempts: 0,
+    correctCount: 0,
+    exampleSentence: "I ____ in the park every morning."
+  },
+  {
+    id: 119,
+    english: "To speak",
+    spanish: "Hablar",
+    group: "Verbs",
+    present: "speak",
+    past: "spoke",
+    pastParticiple: "spoken",
+    isVerb: true,
+    status: "not_practiced",
+    attempts: 0,
+    correctCount: 0,
+    exampleSentence: "They ____ English fluently."
+  },
+  {
+    id: 120,
+    english: "To write",
+    spanish: "Escribir",
+    group: "Verbs",
+    present: "write",
+    past: "wrote",
+    pastParticiple: "written",
+    isVerb: true,
+    status: "not_practiced",
+    attempts: 0,
+    correctCount: 0,
+    exampleSentence: "She likes to ____ stories."
   }
 ];

@@ -1,18 +1,22 @@
 import React, { useState, useEffect } from 'react';
 import { ExerciseQuestion, QuestionResult, VocabularyItem } from '../types';
-import { CheckCircle2, XCircle, HelpCircle, ArrowRight, RefreshCcw, Sparkles, Send, Lightbulb, MessageSquare, Eye, Languages, Volume2 } from 'lucide-react';
+import { CheckCircle2, XCircle, HelpCircle, ArrowRight, RefreshCcw, Sparkles, Send, Lightbulb, MessageSquare, Eye, Languages, Volume2, LogOut } from 'lucide-react';
 import { playPronunciation } from '../utils/audio';
+import { PracticePendingWordsPanel } from './PracticePendingWordsPanel';
+
 
 interface QuizRunnerProps {
   questions: ExerciseQuestion[];
   onCompleteQuiz: (results: QuestionResult[]) => void;
   onUpdateWordStatus: (wordId: number, isCorrect: boolean) => void;
+  onExitQuiz?: () => void;
 }
 
 export const QuizRunner: React.FC<QuizRunnerProps> = ({
   questions,
   onCompleteQuiz,
-  onUpdateWordStatus
+  onUpdateWordStatus,
+  onExitQuiz
 }) => {
   const [currentIndex, setCurrentIndex] = useState<number>(0);
   const [userInput, setUserInput] = useState<string>('');
@@ -537,6 +541,15 @@ export const QuizRunner: React.FC<QuizRunnerProps> = ({
     setUserInput(optionText);
   };
 
+  const handleExitQuiz = () => {
+    const confirmed = window.confirm(
+      "¿Estás seguro de que deseas salir de la evaluación?\n\nSe cancelará la sesión actual y volverás al menú principal."
+    );
+    if (confirmed && onExitQuiz) {
+      onExitQuiz();
+    }
+  };
+
   const progressPercentage = Math.round(((currentIndex + 1) / questions.length) * 100);
 
   return (
@@ -547,7 +560,20 @@ export const QuizRunner: React.FC<QuizRunnerProps> = ({
           <span className="font-bold text-indigo-600 uppercase tracking-wider">
             Ejercicio {currentIndex + 1} de {questions.length}
           </span>
-          <span className="font-mono font-semibold">{progressPercentage}% Completado</span>
+          <div className="flex items-center space-x-3">
+            <span className="font-mono font-semibold">{progressPercentage}% Completado</span>
+            {onExitQuiz && (
+              <button
+                type="button"
+                onClick={handleExitQuiz}
+                className="inline-flex items-center text-xs font-bold text-rose-700 hover:text-rose-800 bg-rose-50 hover:bg-rose-100 px-2.5 py-1 rounded-lg border border-rose-200 transition-all cursor-pointer shadow-2xs"
+                title="Salir de la evaluación"
+              >
+                <LogOut className="w-3.5 h-3.5 mr-1 text-rose-600" />
+                <span>Salir de Evaluación</span>
+              </button>
+            )}
+          </div>
         </div>
 
         {/* Progress Bar */}
@@ -608,16 +634,6 @@ export const QuizRunner: React.FC<QuizRunnerProps> = ({
                     overrideSentence || currentQuestion.contextSentence
                   )}
                 </div>
-                {!isGeneratingSentence && (overrideSentence || currentQuestion.contextSentence) && (
-                  <button
-                    type="button"
-                    onClick={() => playPronunciation(overrideSentence || currentQuestion.contextSentence || '')}
-                    className="ml-3 p-2 text-indigo-600 hover:text-indigo-800 hover:bg-indigo-100 rounded-xl transition-colors cursor-pointer flex-shrink-0"
-                    title="Escuchar pronunciación"
-                  >
-                    <Volume2 className="w-5 h-5" />
-                  </button>
-                )}
               </div>
             </div>
           )}
@@ -1179,6 +1195,37 @@ export const QuizRunner: React.FC<QuizRunnerProps> = ({
                 </h4>
                 <p className="text-xs sm:text-sm leading-relaxed">{feedback}</p>
 
+                {/* Requirement 4: Complete sentence with audio button for Fill in the Blank when answered/revealed */}
+                {currentQuestion.type === 'fill_in_blank' && (
+                  (() => {
+                    const baseSent = overrideSentence || currentQuestion.contextSentence || '';
+                    const fullSentence = baseSent
+                      .replace(/____+/g, currentQuestion.word.english)
+                      .replace(/____/g, currentQuestion.word.english);
+                    return (
+                      <div className="mt-3 p-3.5 bg-indigo-100/90 border border-indigo-200 rounded-xl space-y-2">
+                        <div className="flex items-center justify-between">
+                          <span className="text-xs font-bold text-indigo-900 uppercase tracking-wider">
+                            Oración Completa:
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() => playPronunciation(fullSentence)}
+                            className="inline-flex items-center text-xs font-bold text-indigo-700 hover:text-indigo-900 bg-white hover:bg-indigo-50 px-2.5 py-1 rounded-lg border border-indigo-300 transition-all cursor-pointer shadow-2xs"
+                            title="Escuchar la oración completa"
+                          >
+                            <Volume2 className="w-4 h-4 mr-1.5 text-indigo-600" />
+                            <span>Escuchar Oración Completa</span>
+                          </button>
+                        </div>
+                        <p className="text-sm font-bold text-indigo-950 font-sans">
+                          "{fullSentence}"
+                        </p>
+                      </div>
+                    );
+                  })()
+                )}
+
                 {/* Confirm sentence translation for Type D when perfect */}
                 {isCurrentCorrect && currentQuestion.type === 'sentence_construction' && spanishSentenceTranslation && (
                   <div className="mt-3 p-3 bg-emerald-100/80 border border-emerald-200 rounded-lg text-xs space-y-1">
@@ -1216,7 +1263,11 @@ export const QuizRunner: React.FC<QuizRunnerProps> = ({
           </button>
         )}
       </div>
+
+      {/* Side / Bottom panel for writing unknown words during practice */}
+      <PracticePendingWordsPanel className="mt-6" />
     </div>
   );
 };
+
 

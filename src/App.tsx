@@ -271,6 +271,7 @@ export default function App() {
                 questions={currentQuestions}
                 onCompleteQuiz={handleCompleteQuiz}
                 onUpdateWordStatus={handleUpdateWordStatus}
+                onExitQuiz={() => setCurrentQuestions(null)}
               />
             )}
 

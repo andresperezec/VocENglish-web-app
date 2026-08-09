@@ -105,3 +105,11 @@ export interface QuizHistory {
   };
   wordIdsUsed: number[];
 }
+
+export interface PendingCardWord {
+  id: string;
+  word: string;
+  targetGroup: string;
+  addedAt: string;
+}
+

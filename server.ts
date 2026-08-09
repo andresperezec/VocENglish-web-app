@@ -28,6 +28,86 @@ const getGeminiAi = () => {
 };
 
 // API Endpoint 1: Evaluate Sentence Construction (Type D)
+app.post("/api/generate-flashcard-sentence", async (req, res) => {
+  try {
+    const { wordEnglish, wordSpanish, cardFrontLanguage, previousSentence } = req.body;
+
+    if (!wordEnglish || !wordSpanish) {
+      return res.status(400).json({ error: "Parámetros requeridos faltantes (wordEnglish, wordSpanish)." });
+    }
+
+    const frontLang = cardFrontLanguage === 'es' ? 'es' : 'en';
+    const ai = getGeminiAi();
+
+    // Fallback if AI unavailable
+    if (!ai) {
+      if (frontLang === 'en') {
+        return res.json({
+          frontSentence: `The company wants to ${wordEnglish} its best strategy.`,
+          backSentence: `La compañía desea ${wordSpanish} su mejor estrategia.`
+        });
+      } else {
+        return res.json({
+          frontSentence: `Es fundamental ${wordSpanish} en este tipo de situaciones.`,
+          backSentence: `It is essential to ${wordEnglish} in this kind of situation.`
+        });
+      }
+    }
+
+    const prompt = `
+    Eres un profesor de idiomas experto creando oraciones de ejemplo para tarjetas de memoria (flashcards).
+    Palabra u expresión en Inglés: "${wordEnglish}"
+    Palabra u expresión en Español: "${wordSpanish}"
+    Idioma del Anverso (Frente de la Tarjeta): ${frontLang === 'en' ? 'Inglés' : 'Español'}
+    ${previousSentence ? `Evita repetir la oración previa: "${previousSentence}"` : ''}
+
+    INSTRUCCIONES OBLIGATORIAS:
+    ${frontLang === 'en'
+      ? `1. "frontSentence": Crea una oración de ejemplo natural, útil y cotidiana en INGLÉS que use correctamente la palabra "${wordEnglish}". LA ORACIÓN DEBE ESTAR COMPLETAMENTE EN INGLÉS, SIN MEZCLAR PALABRAS EN ESPAÑOL.
+2. "backSentence": Proporciona la traducción exacta, natural y completa de esa MISMA oración al ESPAÑOL.`
+      : `1. "frontSentence": Crea una oración de ejemplo natural, útil y cotidiana en ESPAÑOL que use correctamente la palabra "${wordSpanish}". LA ORACIÓN DEBE ESTAR COMPLETAMENTE EN ESPAÑOL, SIN MEZCLAR PALABRAS EN INGLÉS.
+2. "backSentence": Proporciona la traducción exacta, natural y completa de esa MISMA oración al INGLÉS.`
+    }
+
+    Devuelve un objeto JSON estructurado con las dos propiedades:
+    - "frontSentence" (string)
+    - "backSentence" (string)
+    `;
+
+    const response = await ai.models.generateContent({
+      model: "gemini-3.6-flash",
+      contents: prompt,
+      config: {
+        responseMimeType: "application/json",
+        responseSchema: {
+          type: Type.OBJECT,
+          properties: {
+            frontSentence: { type: Type.STRING, description: "Oración para el frente de la tarjeta" },
+            backSentence: { type: Type.STRING, description: "Traducción exacta para el reverso de la tarjeta" }
+          },
+          required: ["frontSentence", "backSentence"]
+        }
+      }
+    });
+
+    const result = JSON.parse(response.text || "{}");
+    return res.json({
+      frontSentence: result.frontSentence || (frontLang === 'en' ? `We need to ${wordEnglish} this.` : `Debemos ${wordSpanish} esto.`),
+      backSentence: result.backSentence || (frontLang === 'en' ? `Necesitamos ${wordSpanish} esto.` : `We need to ${wordEnglish} this.`)
+    });
+
+  } catch (error: any) {
+    console.error("Error generating flashcard sentence:", error);
+    const { wordEnglish, wordSpanish, cardFrontLanguage } = req.body;
+    const frontLang = cardFrontLanguage === 'es' ? 'es' : 'en';
+    return res.json({
+      frontSentence: frontLang === 'en' ? `Please try to ${wordEnglish} during practice.` : `Por favor intenta ${wordSpanish} durante la práctica.`,
+      backSentence: frontLang === 'en' ? `Por favor intenta ${wordSpanish} durante la práctica.` : `Please try to ${wordEnglish} during practice.`
+    });
+  }
+});
+
+// API Endpoint 1: Evaluate Sentence Construction (Type D)
 app.post("/api/evaluate-sentence", async (req, res) => {
   try {
     const { wordEnglish, wordSpanish, userSentence } = req.body;
@@ -442,7 +522,9 @@ app.post("/api/batch-complete-words", async (req, res) => {
 });
 
 // Comprehensive dictionary of English irregular verbs for fast and accurate conjugations
-const IRREGULAR_VERBS_DICT: Record<string, { present: string; past: string; pastParticiple: string; spanish: string; detectedTense: string }> = {
+// Comprehensive dictionary of English verbs for fast and accurate conjugations and translations
+const VERBS_DICT: Record<string, { present: string; past: string; pastParticiple: string; spanish: string; detectedTense: string }> = {
+  // Common Irregular Verbs
   drink: { present: 'drink', past: 'drank', pastParticiple: 'drunk', spanish: 'beber / tomar', detectedTense: 'present' },
   drank: { present: 'drink', past: 'drank', pastParticiple: 'drunk', spanish: 'beber / tomar', detectedTense: 'past' },
   drunk: { present: 'drink', past: 'drank', pastParticiple: 'drunk', spanish: 'beber / tomar', detectedTense: 'pastParticiple' },
@@ -485,7 +567,86 @@ const IRREGULAR_VERBS_DICT: Record<string, { present: string; past: string; past
   bought: { present: 'buy', past: 'bought', pastParticiple: 'bought', spanish: 'comprar', detectedTense: 'past' },
   do: { present: 'do', past: 'did', pastParticiple: 'done', spanish: 'hacer', detectedTense: 'present' },
   did: { present: 'do', past: 'did', pastParticiple: 'done', spanish: 'hacer', detectedTense: 'past' },
-  done: { present: 'do', past: 'did', pastParticiple: 'done', spanish: 'hacer', detectedTense: 'pastParticiple' }
+  done: { present: 'do', past: 'did', pastParticiple: 'done', spanish: 'hacer', detectedTense: 'pastParticiple' },
+  get: { present: 'get', past: 'got', pastParticiple: 'gotten', spanish: 'conseguir / obtener', detectedTense: 'present' },
+  got: { present: 'get', past: 'got', pastParticiple: 'gotten', spanish: 'conseguir / obtener', detectedTense: 'past' },
+  gotten: { present: 'get', past: 'got', pastParticiple: 'gotten', spanish: 'conseguir / obtener', detectedTense: 'pastParticiple' },
+  make: { present: 'make', past: 'made', pastParticiple: 'made', spanish: 'hacer / fabricar', detectedTense: 'present' },
+  made: { present: 'make', past: 'made', pastParticiple: 'made', spanish: 'hacer / fabricar', detectedTense: 'past' },
+  know: { present: 'know', past: 'knew', pastParticiple: 'known', spanish: 'saber / conocer', detectedTense: 'present' },
+  knew: { present: 'know', past: 'knew', pastParticiple: 'known', spanish: 'saber / conocer', detectedTense: 'past' },
+  known: { present: 'know', past: 'knew', pastParticiple: 'known', spanish: 'saber / conocer', detectedTense: 'pastParticiple' },
+  think: { present: 'think', past: 'thought', pastParticiple: 'thought', spanish: 'pensar', detectedTense: 'present' },
+  thought: { present: 'think', past: 'thought', pastParticiple: 'thought', spanish: 'pensar', detectedTense: 'past' },
+  sleep: { present: 'sleep', past: 'slept', pastParticiple: 'slept', spanish: 'dormir', detectedTense: 'present' },
+  slept: { present: 'sleep', past: 'slept', pastParticiple: 'slept', spanish: 'dormir', detectedTense: 'past' },
+  feel: { present: 'feel', past: 'felt', pastParticiple: 'felt', spanish: 'sentir', detectedTense: 'present' },
+  felt: { present: 'feel', past: 'felt', pastParticiple: 'felt', spanish: 'sentir', detectedTense: 'past' },
+  read: { present: 'read', past: 'read', pastParticiple: 'read', spanish: 'leer', detectedTense: 'present' },
+  say: { present: 'say', past: 'said', pastParticiple: 'said', spanish: 'decir', detectedTense: 'present' },
+  said: { present: 'say', past: 'said', pastParticiple: 'said', spanish: 'decir', detectedTense: 'past' },
+  tell: { present: 'tell', past: 'told', pastParticiple: 'told', spanish: 'contar / decir', detectedTense: 'present' },
+  told: { present: 'tell', past: 'told', pastParticiple: 'told', spanish: 'contar / decir', detectedTense: 'past' },
+  understand: { present: 'understand', past: 'understood', pastParticiple: 'understood', spanish: 'entender / comprender', detectedTense: 'present' },
+  understood: { present: 'understand', past: 'understood', pastParticiple: 'understood', spanish: 'entender / comprender', detectedTense: 'past' },
+
+  // Common Regular Verbs
+  work: { present: 'work', past: 'worked', pastParticiple: 'worked', spanish: 'trabajar', detectedTense: 'present' },
+  worked: { present: 'work', past: 'worked', pastParticiple: 'worked', spanish: 'trabajar', detectedTense: 'past' },
+  play: { present: 'play', past: 'played', pastParticiple: 'played', spanish: 'jugar', detectedTense: 'present' },
+  played: { present: 'play', past: 'played', pastParticiple: 'played', spanish: 'jugar', detectedTense: 'past' },
+  walk: { present: 'walk', past: 'walked', pastParticiple: 'walked', spanish: 'caminar', detectedTense: 'present' },
+  walked: { present: 'walk', past: 'walked', pastParticiple: 'walked', spanish: 'caminar', detectedTense: 'past' },
+  talk: { present: 'talk', past: 'talked', pastParticiple: 'talked', spanish: 'hablar', detectedTense: 'present' },
+  talked: { present: 'talk', past: 'talked', pastParticiple: 'talked', spanish: 'hablar', detectedTense: 'past' },
+  call: { present: 'call', past: 'called', pastParticiple: 'called', spanish: 'llamar', detectedTense: 'present' },
+  called: { present: 'call', past: 'called', pastParticiple: 'called', spanish: 'llamar', detectedTense: 'past' },
+  listen: { present: 'listen', past: 'listened', pastParticiple: 'listened', spanish: 'escuchar', detectedTense: 'present' },
+  listened: { present: 'listen', past: 'listened', pastParticiple: 'listened', spanish: 'escuchar', detectedTense: 'past' },
+  study: { present: 'study', past: 'studied', pastParticiple: 'studied', spanish: 'estudiar', detectedTense: 'present' },
+  studied: { present: 'study', past: 'studied', pastParticiple: 'studied', spanish: 'estudiar', detectedTense: 'past' },
+  learn: { present: 'learn', past: 'learned', pastParticiple: 'learned', spanish: 'aprender', detectedTense: 'present' },
+  learned: { present: 'learn', past: 'learned', pastParticiple: 'learned', spanish: 'aprender', detectedTense: 'past' },
+  cook: { present: 'cook', past: 'cooked', pastParticiple: 'cooked', spanish: 'cocinar', detectedTense: 'present' },
+  cooked: { present: 'cook', past: 'cooked', pastParticiple: 'cooked', spanish: 'cocinar', detectedTense: 'past' },
+  clean: { present: 'clean', past: 'cleaned', pastParticiple: 'cleaned', spanish: 'limpiar', detectedTense: 'present' },
+  cleaned: { present: 'clean', past: 'cleaned', pastParticiple: 'cleaned', spanish: 'limpiar', detectedTense: 'past' },
+  open: { present: 'open', past: 'opened', pastParticiple: 'opened', spanish: 'abrir', detectedTense: 'present' },
+  opened: { present: 'open', past: 'opened', pastParticiple: 'opened', spanish: 'abrir', detectedTense: 'past' },
+  close: { present: 'close', past: 'closed', pastParticiple: 'closed', spanish: 'cerrar', detectedTense: 'present' },
+  closed: { present: 'close', past: 'closed', pastParticiple: 'closed', spanish: 'cerrar', detectedTense: 'past' },
+  start: { present: 'start', past: 'started', pastParticiple: 'started', spanish: 'comenzar / empezar', detectedTense: 'present' },
+  started: { present: 'start', past: 'started', pastParticiple: 'started', spanish: 'comenzar / empezar', detectedTense: 'past' },
+  stop: { present: 'stop', past: 'stopped', pastParticiple: 'stopped', spanish: 'detener / parar', detectedTense: 'present' },
+  stopped: { present: 'stop', past: 'stopped', pastParticiple: 'stopped', spanish: 'detener / parar', detectedTense: 'past' },
+  finish: { present: 'finish', past: 'finished', pastParticiple: 'finished', spanish: 'terminar / finalizar', detectedTense: 'present' },
+  finished: { present: 'finish', past: 'finished', pastParticiple: 'finished', spanish: 'terminar / finalizar', detectedTense: 'past' },
+  help: { present: 'help', past: 'helped', pastParticiple: 'helped', spanish: 'ayudar', detectedTense: 'present' },
+  helped: { present: 'help', past: 'helped', pastParticiple: 'helped', spanish: 'ayudar', detectedTense: 'past' },
+  want: { present: 'want', past: 'wanted', pastParticiple: 'wanted', spanish: 'querer', detectedTense: 'present' },
+  wanted: { present: 'want', past: 'wanted', pastParticiple: 'wanted', spanish: 'querer', detectedTense: 'past' },
+  need: { present: 'need', past: 'needed', pastParticiple: 'needed', spanish: 'necesitar', detectedTense: 'present' },
+  needed: { present: 'need', past: 'needed', pastParticiple: 'needed', spanish: 'necesitar', detectedTense: 'past' },
+  like: { present: 'like', past: 'liked', pastParticiple: 'liked', spanish: 'gustar', detectedTense: 'present' },
+  liked: { present: 'like', past: 'liked', pastParticiple: 'liked', spanish: 'gustar', detectedTense: 'past' },
+  love: { present: 'love', past: 'loved', pastParticiple: 'loved', spanish: 'amar / encantar', detectedTense: 'present' },
+  loved: { present: 'love', past: 'loved', pastParticiple: 'loved', spanish: 'amar / encantar', detectedTense: 'past' },
+  live: { present: 'live', past: 'lived', pastParticiple: 'lived', spanish: 'vivir', detectedTense: 'present' },
+  lived: { present: 'live', past: 'lived', pastParticiple: 'lived', spanish: 'vivir', detectedTense: 'past' },
+  ask: { present: 'ask', past: 'asked', pastParticiple: 'asked', spanish: 'preguntar / pedir', detectedTense: 'present' },
+  asked: { present: 'ask', past: 'asked', pastParticiple: 'asked', spanish: 'preguntar / pedir', detectedTense: 'past' },
+  answer: { present: 'answer', past: 'answered', pastParticiple: 'answered', spanish: 'responder / contestar', detectedTense: 'present' },
+  answered: { present: 'answer', past: 'answered', pastParticiple: 'answered', spanish: 'responder', detectedTense: 'past' },
+  use: { present: 'use', past: 'used', pastParticiple: 'used', spanish: 'usar / utilizar', detectedTense: 'present' },
+  used: { present: 'use', past: 'used', pastParticiple: 'used', spanish: 'usar / utilizar', detectedTense: 'past' },
+  try: { present: 'try', past: 'tried', pastParticiple: 'tried', spanish: 'intentar / probar', detectedTense: 'present' },
+  tried: { present: 'try', past: 'tried', pastParticiple: 'tried', spanish: 'intentar / probar', detectedTense: 'past' },
+  look: { present: 'look', past: 'looked', pastParticiple: 'looked', spanish: 'mirar', detectedTense: 'present' },
+  looked: { present: 'look', past: 'looked', pastParticiple: 'looked', spanish: 'mirar', detectedTense: 'past' },
+  watch: { present: 'watch', past: 'watched', pastParticiple: 'watched', spanish: 'observar / ver', detectedTense: 'present' },
+  watched: { present: 'watch', past: 'watched', pastParticiple: 'watched', spanish: 'observar / ver', detectedTense: 'past' },
+  travel: { present: 'travel', past: 'traveled', pastParticiple: 'traveled', spanish: 'viajar', detectedTense: 'present' },
+  traveled: { present: 'travel', past: 'traveled', pastParticiple: 'traveled', spanish: 'viajar', detectedTense: 'past' }
 };
 
 // API Endpoint: Autocomplete Verb Forms (Present, Past, Past Participle, Spanish, isVerb, detectedTense)
@@ -493,19 +654,20 @@ app.post("/api/complete-verb", async (req, res) => {
   try {
     const { verb, present, past, pastParticiple, spanish } = req.body;
     const baseVerb = (verb || present || past || pastParticiple || spanish || "").trim().toLowerCase();
+    const cleanVerbKey = baseVerb.replace(/^to\s+/i, '').trim();
 
     if (!baseVerb) {
       return res.status(400).json({ error: "Ingresa al menos un campo del verbo." });
     }
 
-    // Direct check in local irregular dictionary
-    if (IRREGULAR_VERBS_DICT[baseVerb]) {
-      const match = IRREGULAR_VERBS_DICT[baseVerb];
+    // Direct check in local verbs dictionary
+    if (VERBS_DICT[cleanVerbKey]) {
+      const match = VERBS_DICT[cleanVerbKey];
       return res.json({
         present: present || match.present,
         past: past || match.past,
         pastParticiple: pastParticiple || match.pastParticiple,
-        spanish: spanish || match.spanish,
+        spanish: match.spanish,
         detectedTense: match.detectedTense,
         isVerb: true
       });
@@ -514,34 +676,33 @@ app.post("/api/complete-verb", async (req, res) => {
     const ai = getGeminiAi();
 
     if (!ai) {
-      const base = baseVerb;
+      const base = cleanVerbKey || baseVerb;
       return res.json({
         present: present || base,
         past: past || `${base}ed`,
         pastParticiple: pastParticiple || `${base}ed`,
-        spanish: spanish || `Significado de ${base}`,
+        spanish: spanish || `Traducción de ${base}`,
         detectedTense: 'present',
         isVerb: true
       });
     }
 
     const prompt = `
-    Eres un lingüista y diccionario experto de verbos en inglés y español.
-    Evalúa si la siguiente palabra/entrada es un VERBO en inglés o no:
+    Eres un lingüista y diccionario bilingüe experto de verbos en inglés y español.
+    Evalúa si la siguiente palabra o expresión es un VERBO en inglés:
     - Entrada: "${baseVerb}"
     - Presente proporcionado: "${present || ''}"
     - Pasado proporcionado: "${past || ''}"
     - Participio proporcionado: "${pastParticiple || ''}"
 
-    REGLAS IMPORTANTES:
-    1. Determina "isVerb": booleano (true si es un verbo en inglés, false si es sustantivo/adjetivo/otra palabra no verbo como "apple", "happy", "car", "table").
-    2. Si es verbo, identifica "detectedTense": uno de ["present", "past", "pastParticiple"]. Por ejemplo "drunk" se ingresó en participio ("pastParticiple"), "went" en pasado ("past"), "drink" en presente ("present").
-    3. Para verbos IRREGULARES en inglés, NUNCA agregues "-ed" erróneamente. Da la conjugación exacta e impecable (ej: drink -> drank -> drunk, go -> went -> gone, eat -> ate -> eaten).
-    4. Proporciona las 4 formas del verbo:
-       - "present": V1 en inglés (ej: "drink", "play", "write")
-       - "past": V2 en inglés (ej: "drank", "played", "wrote")
-       - "pastParticiple": V3 en inglés (ej: "drunk", "played", "written")
-       - "spanish": significado principal en español en infinitivo (ej: "beber", "jugar", "escribir")
+    REGLAS IMPORTANTES Y OBLIGATORIAS:
+    1. Determina "isVerb": booleano (true si es un verbo en inglés, false si es otra clase de palabra).
+    2. Identifica "detectedTense": uno de ["present", "past", "pastParticiple"].
+    3. Proporciona las 4 formas del verbo:
+       - "present": V1 en inglés (ej: "run", "speak", "write", "play")
+       - "past": V2 en inglés (ej: "ran", "spoke", "wrote", "played")
+       - "pastParticiple": V3 en inglés (ej: "run", "spoken", "written", "played")
+       - "spanish": TRADUCCIÓN DIRECTA Y ESPECÍFICA de "${baseVerb}" al español en infinitivo (ej: "correr" para run, "hablar" para speak, "escribir" para write, "jugar" para play, "caminar" para walk, "cocinar" para cook). NUNCA DEVUELVAS "trabajar" A MENOS QUE EL VERBO EN INGLÉS SEA "work".
     `;
 
     const response = await ai.models.generateContent({
@@ -559,32 +720,46 @@ app.post("/api/complete-verb", async (req, res) => {
             pastParticiple: { type: Type.STRING },
             spanish: { type: Type.STRING }
           },
-          required: ["isVerb", "present", "past", "pastParticiple", "spanish"]
+          required: ["isVerb", "present", "present", "past", "pastParticiple", "spanish"]
         }
       }
     });
 
     const result = JSON.parse(response.text || "{}");
+    let spanishTranslation = result.spanish || spanish || "";
+
+    // Guard against erroneous "trabajar" default when verb is not "work"
+    if (spanishTranslation.toLowerCase() === 'trabajar' && !baseVerb.includes('work')) {
+      if (VERBS_DICT[cleanVerbKey]) {
+        spanishTranslation = VERBS_DICT[cleanVerbKey].spanish;
+      } else {
+        spanishTranslation = `Traducción de ${cleanVerbKey || baseVerb}`;
+      }
+    }
+
     return res.json({
       isVerb: result.isVerb !== undefined ? result.isVerb : true,
       detectedTense: result.detectedTense || "present",
       present: result.present || present || baseVerb || "",
       past: result.past || past || "",
       pastParticiple: result.pastParticiple || pastParticiple || "",
-      spanish: result.spanish || spanish || ""
+      spanish: spanishTranslation
     });
 
   } catch (error: any) {
     console.error("Error completing verb:", error);
     const { verb, present, past, pastParticiple, spanish } = req.body;
-    const base = (verb || present || past || pastParticiple || spanish || "").toLowerCase();
+    const base = (verb || present || past || pastParticiple || spanish || "").toLowerCase().replace(/^to\s+/i, '');
+    const cleanKey = base.trim();
+    const dictionaryMatch = VERBS_DICT[cleanKey];
+
     return res.json({
       isVerb: true,
       detectedTense: "present",
       present: present || base || "",
-      past: past || (base ? `${base}ed` : ""),
-      pastParticiple: pastParticiple || (base ? `${base}ed` : ""),
-      spanish: spanish || (base ? `Significado de ${base}` : "")
+      past: past || (dictionaryMatch?.past || (base ? `${base}ed` : "")),
+      pastParticiple: pastParticiple || (dictionaryMatch?.pastParticiple || (base ? `${base}ed` : "")),
+      spanish: spanish || (dictionaryMatch?.spanish || (base ? `Traducción de ${base}` : ""))
     });
   }
 });
@@ -595,10 +770,12 @@ app.post("/api/generate-verb-examples", async (req, res) => {
     const { present, past, pastParticiple, spanish } = req.body;
     const ai = getGeminiAi();
 
-    const v1 = (present || "work").trim();
-    const v2 = (past || `${v1}ed`).trim();
-    const v3 = (pastParticiple || `${v1}ed`).trim();
-    const es = (spanish || "trabajar").trim();
+    const v1 = (present || "play").trim();
+    const cleanV1 = v1.replace(/^to\s+/i, '').toLowerCase();
+    const dictMatch = VERBS_DICT[cleanV1];
+    const v2 = (past || dictMatch?.past || `${v1}ed`).trim();
+    const v3 = (pastParticiple || dictMatch?.pastParticiple || `${v1}ed`).trim();
+    const es = (spanish && spanish !== 'trabajar' ? spanish : (dictMatch?.spanish || `Significado de ${v1}`)).trim();
 
     if (!ai) {
       return res.json({
@@ -679,10 +856,12 @@ app.post("/api/generate-verb-examples", async (req, res) => {
   } catch (error: any) {
     console.error("Error generating verb sentences:", error);
     const { present, past, pastParticiple, spanish } = req.body;
-    const v1 = (present || "work").trim();
-    const v2 = (past || `${v1}ed`).trim();
-    const v3 = (pastParticiple || `${v1}ed`).trim();
-    const es = (spanish || "trabajar").trim();
+    const v1 = (present || "play").trim();
+    const cleanV1 = v1.replace(/^to\s+/i, '').toLowerCase();
+    const dictMatch = VERBS_DICT[cleanV1];
+    const v2 = (past || dictMatch?.past || `${v1}ed`).trim();
+    const v3 = (pastParticiple || dictMatch?.pastParticiple || `${v1}ed`).trim();
+    const es = (spanish && spanish !== 'trabajar' ? spanish : (dictMatch?.spanish || `Significado de ${v1}`)).trim();
     return res.json({
       examples: [
         { tense: "Present Simple", sentence: `I ${v1} every day.`, translation: `Yo ${es} todos los días.` },
@@ -755,11 +934,15 @@ app.post("/api/generate-verb-tense-sentence", async (req, res) => {
 
   } catch (error: any) {
     console.error("Error generating verb tense sentence:", error);
-    const verbStr = req.body.verb?.english || "work";
-    const spanishStr = req.body.verb?.spanish || "trabajar";
+    const verbStr = (req.body.verb?.present || req.body.verb?.english || "play").replace(/^to\s+/i, '');
+    const cleanKey = verbStr.trim().toLowerCase();
+    const dictMatch = VERBS_DICT[cleanKey];
+    const spanishStr = req.body.verb?.spanish && req.body.verb?.spanish !== 'trabajar'
+      ? req.body.verb.spanish
+      : (dictMatch?.spanish || `traducción de ${verbStr}`);
     return res.json({
-      englishSentence: `She is ${verbStr}ing hard today.`,
-      spanishSentence: `Ella está trabajando duro hoy.`,
+      englishSentence: `She is ${verbStr}ing right now.`,
+      spanishSentence: `Ella está ${spanishStr.toLowerCase()} ahora mismo.`,
       tenseName: req.body.tenseName || "Present Continuous"
     });
   }

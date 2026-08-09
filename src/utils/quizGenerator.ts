@@ -27,28 +27,79 @@ export function buildContextSentenceWithBlanks(word: VocabularyItem): { sentence
   };
 }
 
-// Generate 5 options (A, B, C, D, E) for Fill-in-the-blank hint
+const FALLBACK_DISTRACTORS: Record<number, string[]> = {
+  1: ["always", "never", "before", "around", "behind", "smoothly", "quietly", "suddenly", "instead", "towards", "perhaps", "already", "somewhere", "together"],
+  2: ["push in", "get off", "take over", "bring up", "turn down", "keep on", "look for", "give in", "run out", "set up", "hold on", "break down", "call off", "carry out"],
+  3: ["get along with", "look forward to", "run out of", "keep up with", "come up with", "cut down on", "make up for", "face up to", "check up on", "back out of"],
+  4: ["as far as possible", "from time to time", "at the end of", "in the middle of", "all of a sudden", "once in a while"]
+};
+
+// Helper: Shuffle array randomly
+function shuffleArray<T>(array: T[]): T[] {
+  const arr = [...array];
+  for (let i = arr.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [arr[i], arr[j]] = [arr[j], arr[i]];
+  }
+  return arr;
+}
+
+// Generate 5 options (A, B, C, D, E) for Fill-in-the-blank hint matching the EXACT word count
 export function generateHintOptions(
   correctWord: VocabularyItem, 
   allVocabulary: VocabularyItem[]
 ): { options: string[]; correctLetter: string } {
-  // Select 4 distinct distractor phrases
-  const distractors = allVocabulary
-    .filter(item => item.id !== correctWord.id && item.english.trim().toLowerCase() !== correctWord.english.trim().toLowerCase())
-    .map(item => item.english);
-  
+  const targetWordCount = countWordsInPhrase(correctWord.english);
+  const correctNorm = correctWord.english.trim().toLowerCase();
+
+  // Find matching distractors in allVocabulary with same word count
+  const matchingFromVocab = allVocabulary
+    .filter(item => {
+      const norm = item.english.trim().toLowerCase();
+      return norm !== correctNorm && countWordsInPhrase(item.english) === targetWordCount;
+    })
+    .map(item => item.english.trim());
+
+  // Deduplicate
+  const uniqueMatching = Array.from(new Set(matchingFromVocab));
+
+  // If we don't have enough from vocabulary, draw from FALLBACK_DISTRACTORS
+  const fallbackPool = FALLBACK_DISTRACTORS[targetWordCount] || [
+    `phrase ${targetWordCount} one`,
+    `phrase ${targetWordCount} two`,
+    `phrase ${targetWordCount} three`,
+    `phrase ${targetWordCount} four`
+  ];
+
+  const pool = [...uniqueMatching];
+  for (const f of fallbackPool) {
+    if (pool.length >= 10) break;
+    if (f.toLowerCase() !== correctNorm && !pool.map(p => p.toLowerCase()).includes(f.toLowerCase())) {
+      pool.push(f);
+    }
+  }
+
   // Shuffle distractors and pick 4
-  const shuffledDistractors = [...distractors].sort(() => Math.random() - 0.5).slice(0, 4);
+  const selectedDistractors = shuffleArray(pool).slice(0, 4);
+
+  // If still fewer than 4 distractors (e.g., custom word count), generate synthetic N-word distractors
+  while (selectedDistractors.length < 4) {
+    const dummyWords = ["alpha", "beta", "gamma", "delta", "epsilon", "omega"];
+    const synthetic = Array.from({ length: targetWordCount }, (_, idx) => dummyWords[(selectedDistractors.length + idx) % dummyWords.length]).join(" ");
+    if (!selectedDistractors.includes(synthetic) && synthetic.toLowerCase() !== correctNorm) {
+      selectedDistractors.push(synthetic);
+    }
+  }
 
   // Combine correct answer with 4 distractors
-  const optionsList = [correctWord.english, ...shuffledDistractors];
+  const optionsList = [correctWord.english.trim(), ...selectedDistractors];
   
   // Shuffle all 5 options
-  const shuffledOptions = [...optionsList].sort(() => Math.random() - 0.5);
+  const shuffledOptions = shuffleArray(optionsList);
 
   const letters = ['a', 'b', 'c', 'd', 'e'];
-  const correctIndex = shuffledOptions.indexOf(correctWord.english);
-  const correctLetter = letters[correctIndex];
+  const correctIndex = shuffledOptions.findIndex(opt => opt.toLowerCase() === correctNorm);
+  const correctLetter = letters[correctIndex >= 0 ? correctIndex : 0];
 
   return {
     options: shuffledOptions,
@@ -70,25 +121,28 @@ export function createQuizQuestions(
   }
 
   // Shuffle pool to ensure random sampling without replacement
-  const shuffledPool = [...pool].sort(() => Math.random() - 0.5);
-
-  const totalRequested = 
-    config.fillInBlankCount + 
-    config.enToEsCount + 
-    config.esToEnCount + 
-    config.sentenceCount +
-    (config.verbsStudyCount || 0) +
-    (config.verbTensesCount || 0);
+  const shuffledPool = shuffleArray(pool);
 
   if (shuffledPool.length === 0) {
     throw new Error("No hay palabras disponibles con los filtros o selección actual.");
   }
 
-  // Verb pool for questions 5 & 6
-  const verbPool = shuffledPool.filter(
-    w => (w.group || '').toLowerCase() === 'verbs' || (w.group || '').toLowerCase() === 'verbos' || w.present || w.past
+  // REQUIREMENT 5: Questions 5 & 6 ONLY admit words from the 'Verbs' (Verbos) folder
+  const allVerbsInSystem = allVocabulary.filter(
+    w => (w.group || '').trim().toLowerCase() === 'verbs' || (w.group || '').trim().toLowerCase() === 'verbos'
   );
-  const effectiveVerbPool = verbPool.length > 0 ? verbPool : shuffledPool;
+
+  // Check if user selected specific words from the 'Verbs' folder
+  let selectedVerbs = pool.filter(
+    w => (w.group || '').trim().toLowerCase() === 'verbs' || (w.group || '').trim().toLowerCase() === 'verbos'
+  );
+
+  // If user selected 0 words in 'Verbs', default to ALL words from the 'Verbs' folder
+  if (selectedVerbs.length === 0) {
+    selectedVerbs = allVerbsInSystem;
+  }
+
+  const effectiveVerbPool = shuffleArray(selectedVerbs.length > 0 ? selectedVerbs : allVocabulary);
   let verbIndex = 0;
 
   const getNextVerb = (): VocabularyItem => {
@@ -249,6 +303,6 @@ export function createQuizQuestions(
     });
   }
 
-  // Shuffle final list of questions if desired, or keep grouped
-  return questions;
+  // Shuffle final list of questions so question types appear in random order
+  return shuffleArray(questions);
 }

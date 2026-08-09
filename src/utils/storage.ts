@@ -1,10 +1,12 @@
-import { VocabularyItem, QuizHistory, WordStatus } from '../types';
+import { VocabularyItem, QuizHistory, WordStatus, PendingCardWord } from '../types';
 import { INITIAL_VOCABULARY } from '../data/vocabulary';
 
 const STORAGE_KEY_VOCAB = 'vocab_eval_items_v1';
 const STORAGE_KEY_HISTORY = 'vocab_eval_history_v1';
 const STORAGE_KEY_CUSTOM_GROUPS = 'vocab_eval_custom_groups_v1';
 const STORAGE_KEY_TRASH = 'vocab_eval_trash_v1';
+const STORAGE_KEY_PENDING_WORDS = 'vocab_eval_pending_words_v1';
+
 
 export function getStoredTrash(): VocabularyItem[] {
   try {
@@ -28,17 +30,7 @@ export function saveStoredTrash(trash: VocabularyItem[]): void {
 export function getStoredCustomGroups(): string[] {
   try {
     const data = localStorage.getItem(STORAGE_KEY_CUSTOM_GROUPS);
-    if (!data) {
-      const vocab = getStoredVocabulary();
-      const initialGroups: string[] = [];
-      vocab.forEach(item => {
-        if (item.group && item.group.trim() && item.group.trim() !== 'General' && !initialGroups.includes(item.group.trim())) {
-          initialGroups.push(item.group.trim());
-        }
-      });
-      saveStoredCustomGroups(initialGroups);
-      return initialGroups;
-    }
+    if (!data) return [];
     const parsed = JSON.parse(data);
     return Array.isArray(parsed) ? parsed : [];
   } catch (e) {
@@ -56,13 +48,14 @@ export function saveStoredCustomGroups(groups: string[]): void {
 
 export function addCustomGroup(groupName: string): string[] {
   const clean = groupName.trim();
-  if (!clean || clean === 'General') return getStoredGroups();
+  if (!clean || clean === 'General') return getStoredCustomGroups();
   const currentCustom = getStoredCustomGroups();
   if (!currentCustom.includes(clean)) {
     const updated = [...currentCustom, clean];
     saveStoredCustomGroups(updated);
+    return updated;
   }
-  return getStoredGroups();
+  return currentCustom;
 }
 
 export function addBatchVocabularyWords(newWords: Array<{
@@ -109,18 +102,124 @@ export function addBatchVocabularyWords(newWords: Array<{
   return updated;
 }
 
+export function ensureVerbsExist(vocab: VocabularyItem[]): VocabularyItem[] {
+  const VERB_TRANSLATIONS: Record<string, string> = {
+    run: "Correr",
+    speak: "Hablar",
+    write: "Escribir",
+    play: "Jugar",
+    walk: "Caminar",
+    talk: "Hablar",
+    listen: "Escuchar",
+    study: "Estudiar",
+    learn: "Aprender",
+    cook: "Cocinar",
+    clean: "Limpiar",
+    open: "Abrir",
+    close: "Cerrar",
+    eat: "Comer",
+    drink: "Beber / Tomar",
+    go: "Ir",
+    see: "Ver",
+    take: "Tomar / Llevar",
+    fly: "Volar",
+    drive: "Conducir",
+    buy: "Comprar",
+    do: "Hacer",
+    make: "Hacer",
+    think: "Pensar",
+    sleep: "Dormir"
+  };
+
+  // Sanitize any existing items where spanish was mistakenly saved as 'trabajar' for non-work verbs
+  let dirty = false;
+  const sanitized = vocab.map(item => {
+    const isWork = (item.english || '').toLowerCase().includes('work') || (item.present || '').toLowerCase().includes('work');
+    if (!isWork && (item.spanish || '').trim().toLowerCase() === 'trabajar') {
+      const verbKey = (item.present || item.english || '').toLowerCase().replace(/^to\s+/i, '').trim();
+      const correctedSpanish = VERB_TRANSLATIONS[verbKey] || (verbKey ? `Significado de ${verbKey}` : item.spanish);
+      dirty = true;
+      return { ...item, spanish: correctedSpanish };
+    }
+    return item;
+  });
+
+  const hasVerbsFolder = sanitized.some(
+    item => (item.group || '').trim().toLowerCase() === 'verbs' || (item.group || '').trim().toLowerCase() === 'verbos'
+  );
+
+  if (!hasVerbsFolder) {
+    let maxId = sanitized.reduce((max, item) => (item.id > max ? item.id : max), 0);
+    const defaultVerbs: VocabularyItem[] = [
+      {
+        id: maxId + 1,
+        english: "To run",
+        spanish: "Correr",
+        group: "Verbs",
+        present: "run",
+        past: "ran",
+        pastParticiple: "run",
+        isVerb: true,
+        status: "not_practiced",
+        attempts: 0,
+        correctCount: 0,
+        exampleSentence: "I ____ in the park every morning."
+      },
+      {
+        id: maxId + 2,
+        english: "To speak",
+        spanish: "Hablar",
+        group: "Verbs",
+        present: "speak",
+        past: "spoke",
+        pastParticiple: "spoken",
+        isVerb: true,
+        status: "not_practiced",
+        attempts: 0,
+        correctCount: 0,
+        exampleSentence: "They ____ English fluently."
+      },
+      {
+        id: maxId + 3,
+        english: "To write",
+        spanish: "Escribir",
+        group: "Verbs",
+        present: "write",
+        past: "wrote",
+        pastParticiple: "written",
+        isVerb: true,
+        status: "not_practiced",
+        attempts: 0,
+        correctCount: 0,
+        exampleSentence: "She likes to ____ stories."
+      }
+    ];
+
+    addCustomGroup('Verbs');
+    const updated = [...defaultVerbs, ...sanitized];
+    saveVocabulary(updated);
+    return updated;
+  }
+
+  if (dirty) {
+    saveVocabulary(sanitized);
+  }
+
+  return sanitized;
+}
+
 export function getStoredVocabulary(): VocabularyItem[] {
   try {
     const data = localStorage.getItem(STORAGE_KEY_VOCAB);
     if (data === null) {
       localStorage.setItem(STORAGE_KEY_VOCAB, JSON.stringify(INITIAL_VOCABULARY));
-      return INITIAL_VOCABULARY;
+      return ensureVerbsExist(INITIAL_VOCABULARY);
     }
     const parsed: VocabularyItem[] = JSON.parse(data);
-    return parsed;
+    return ensureVerbsExist(parsed);
   } catch (e) {
     console.error('Error loading stored vocabulary:', e);
-    return INITIAL_VOCABULARY;
+    return ensureVerbsExist(INITIAL_VOCABULARY);
   }
 }
 
@@ -454,4 +553,65 @@ export function resetFactoryAllData(): VocabularyItem[] {
 export function resetAllData(): void {
   resetFactoryAllData();
 }
+
+// --- PENDING CARD WORDS (Palabras para crear tarjetas) ---
+export function getStoredPendingCardWords(): PendingCardWord[] {
+  try {
+    const data = localStorage.getItem(STORAGE_KEY_PENDING_WORDS);
+    if (!data) return [];
+    const parsed = JSON.parse(data);
+    return Array.isArray(parsed) ? parsed : [];
+  } catch (e) {
+    return [];
+  }
+}
+
+export function saveStoredPendingCardWords(words: PendingCardWord[]): void {
+  try {
+    localStorage.setItem(STORAGE_KEY_PENDING_WORDS, JSON.stringify(words));
+  } catch (e) {
+    console.error('Error saving pending card words:', e);
+  }
+}
+
+export function addPendingCardWord(word: string, targetGroup: string = 'General'): PendingCardWord[] {
+  const clean = word.trim();
+  if (!clean) return getStoredPendingCardWords();
+  const current = getStoredPendingCardWords();
+  
+  // Prevent duplicate exact words
+  const exists = current.some(w => w.word.toLowerCase() === clean.toLowerCase());
+  if (exists) return current;
+
+  const newItem: PendingCardWord = {
+    id: `pending_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
+    word: clean,
+    targetGroup: targetGroup.trim() || 'General',
+    addedAt: new Date().toISOString()
+  };
+
+  const updated = [...current, newItem];
+  saveStoredPendingCardWords(updated);
+  return updated;
+}
+
+export function removePendingCardWord(id: string): PendingCardWord[] {
+  const current = getStoredPendingCardWords();
+  const updated = current.filter(item => item.id !== id);
+  saveStoredPendingCardWords(updated);
+  return updated;
+}
+
+export function clearPendingCardWords(idsToRemove?: string[]): PendingCardWord[] {
+  if (!idsToRemove || idsToRemove.length === 0) {
+    saveStoredPendingCardWords([]);
+    return [];
+  }
+  const current = getStoredPendingCardWords();
+  const removeSet = new Set(idsToRemove);
+  const updated = current.filter(item => !removeSet.has(item.id));
+  saveStoredPendingCardWords(updated);
+  return updated;
+}
+
 

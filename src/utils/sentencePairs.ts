@@ -127,25 +127,53 @@ export function getSentencePairForWord(word: VocabularyItem): SentencePair {
     return KNOWN_PAIRS[word.id];
   }
 
-  // If word has exampleSentence with blanks or text
-  if (word.exampleSentence && word.exampleSentence.trim().length > 0) {
-    let english = word.exampleSentence;
-    if (english.includes('____')) {
-      english = english.replace(/____/g, word.english).replace(/\s+/g, ' ').trim();
-    }
-
-    // Generate matching Spanish sentence using Spanish term
-    const spanish = `Oración con "${word.spanish}": "${english.replace(word.english, word.spanish)}"`;
-
-    return {
-      englishSentence: english,
-      spanishSentence: spanish
-    };
-  }
-
   // Fallback pair if no exampleSentence is defined
   return {
-    englishSentence: `I use "${word.english}" in daily conversations.`,
-    spanishSentence: `Uso "${word.spanish}" en conversaciones diarias.`
+    englishSentence: `I try to ${word.english} in daily conversations.`,
+    spanishSentence: `Intento ${word.spanish} en conversaciones diarias.`
   };
+}
+
+export async function fetchFlashcardSentencePair(
+  wordEnglish: string,
+  wordSpanish: string,
+  cardFrontLanguage: 'en' | 'es',
+  previousSentence?: string
+): Promise<{ frontSentence: string; backSentence: string }> {
+  try {
+    const res = await fetch('/api/generate-flashcard-sentence', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        wordEnglish,
+        wordSpanish,
+        cardFrontLanguage,
+        previousSentence
+      })
+    });
+    if (res.ok) {
+      const data = await res.json();
+      if (data.frontSentence && data.backSentence) {
+        return {
+          frontSentence: data.frontSentence,
+          backSentence: data.backSentence
+        };
+      }
+    }
+  } catch (err) {
+    console.error('Error fetching AI flashcard sentence:', err);
+  }
+
+  // Fallback if network or endpoint fails
+  if (cardFrontLanguage === 'en') {
+    return {
+      frontSentence: `The company wants to ${wordEnglish} its best strategy.`,
+      backSentence: `La compañía desea ${wordSpanish} su mejor estrategia.`
+    };
+  } else {
+    return {
+      frontSentence: `Es importante ${wordSpanish} en situaciones cotidianas.`,
+      backSentence: `It is important to ${wordEnglish} in everyday situations.`
+    };
+  }
 }
